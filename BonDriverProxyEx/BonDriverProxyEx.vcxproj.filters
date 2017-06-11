@@ -13,10 +13,31 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="ソース ファイル\aribb25">
+      <UniqueIdentifier>{f564df38-09ab-4ebd-bb93-f1911107d91b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\aribb25">
+      <UniqueIdentifier>{52f7eaeb-6969-426a-b809-e445d07af6da}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="BonDriverProxyEx.cpp">
       <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="aribb25\b_cas_card.c">
+      <Filter>ソース ファイル\aribb25</Filter>
+    </ClCompile>
+    <ClCompile Include="aribb25\multi2.c">
+      <Filter>ソース ファイル\aribb25</Filter>
+    </ClCompile>
+    <ClCompile Include="aribb25\ts_section_parser.c">
+      <Filter>ソース ファイル\aribb25</Filter>
+    </ClCompile>
+    <ClCompile Include="aribb25\arib_std_b25.c">
+      <Filter>ソース ファイル\aribb25</Filter>
+    </ClCompile>
+    <ClCompile Include="aribb25\B25Decoder.cpp">
+      <Filter>ソース ファイル\aribb25</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -42,6 +63,39 @@
     </ClInclude>
     <ClInclude Include="..\inc\Common.h">
       <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="aribb25\multi2.h">
+      <Filter>ヘッダー ファイル\aribb25</Filter>
+    </ClInclude>
+    <ClInclude Include="aribb25\multi2_error_code.h">
+      <Filter>ヘッダー ファイル\aribb25</Filter>
+    </ClInclude>
+    <ClInclude Include="aribb25\portable.h">
+      <Filter>ヘッダー ファイル\aribb25</Filter>
+    </ClInclude>
+    <ClInclude Include="aribb25\ts_common_types.h">
+      <Filter>ヘッダー ファイル\aribb25</Filter>
+    </ClInclude>
+    <ClInclude Include="aribb25\ts_section_parser.h">
+      <Filter>ヘッダー ファイル\aribb25</Filter>
+    </ClInclude>
+    <ClInclude Include="aribb25\ts_section_parser_error_code.h">
+      <Filter>ヘッダー ファイル\aribb25</Filter>
+    </ClInclude>
+    <ClInclude Include="aribb25\arib_std_b25.h">
+      <Filter>ヘッダー ファイル\aribb25</Filter>
+    </ClInclude>
+    <ClInclude Include="aribb25\arib_std_b25_error_code.h">
+      <Filter>ヘッダー ファイル\aribb25</Filter>
+    </ClInclude>
+    <ClInclude Include="aribb25\b_cas_card.h">
+      <Filter>ヘッダー ファイル\aribb25</Filter>
+    </ClInclude>
+    <ClInclude Include="aribb25\b_cas_card_error_code.h">
+      <Filter>ヘッダー ファイル\aribb25</Filter>
+    </ClInclude>
+    <ClInclude Include="aribb25\B25Decoder.h">
+      <Filter>ヘッダー ファイル\aribb25</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

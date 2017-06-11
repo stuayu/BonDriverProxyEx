@@ -9,6 +9,7 @@
 #include <map>
 #include "Common.h"
 #include "IBonDriver3.h"
+#include "aribb25/B25Decoder.h"
 
 #define HAVE_UI
 #ifdef BUILD_AS_SERVICE
@@ -60,6 +61,7 @@ struct stTsReaderArg {
 	std::list<cProxyServerEx *> TsReceiversList;
 	std::list<cProxyServerEx *> WaitExclusivePrivList;
 	cCriticalSection TsLock;
+	B25Decoder b25;
 	stTsReaderArg()
 	{
 		StopTsRead = FALSE;

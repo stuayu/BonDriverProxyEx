@@ -18,6 +18,8 @@ HWND g_hWnd;
 HMENU g_hMenu;
 #endif
 
+static int g_b25_enable;
+
 static int Init(HMODULE hModule)
 {
 	char szIniPath[MAX_PATH + 16] = { '\0' };
@@ -38,6 +40,13 @@ static int Init(HMODULE hModule)
 	g_OpenTunerRetDelay = GetPrivateProfileIntA("OPTION", "OPENTUNER_RETURN_DELAY", 0, szIniPath);
 	g_SandBoxedRelease = GetPrivateProfileIntA("OPTION", "SANDBOXED_RELEASE", 0, szIniPath);
 	g_DisableUnloadBonDriver = GetPrivateProfileIntA("OPTION", "DISABLE_UNLOAD_BONDRIVER", 0, szIniPath);
+	g_b25_enable = GetPrivateProfileIntA("OPTION", "B25", 0, szIniPath);
+	if (g_b25_enable)
+	{
+		B25Decoder::strip = GetPrivateProfileIntA("OPTION", "STRIP", 1, szIniPath);
+		B25Decoder::emm_proc = GetPrivateProfileIntA("OPTION", "EMM", 0, szIniPath);
+		B25Decoder::multi2_round = GetPrivateProfileIntA("OPTION", "MULTI2ROUND", 4, szIniPath);
+	}
 
 	g_PacketFifoSize = GetPrivateProfileIntA("SYSTEM", "PACKET_FIFO_SIZE", 64, szIniPath);
 	g_TsPacketBufSize = GetPrivateProfileIntA("SYSTEM", "TSPACKET_BUFSIZE", (188 * 1024), szIniPath);
@@ -938,6 +947,8 @@ DWORD cProxyServerEx::Process()
 									m_pTsReaderArg = new stTsReaderArg();
 									m_pTsReaderArg->TsReceiversList.push_back(this);
 									m_pTsReaderArg->pIBon = m_pIBon;
+									if (g_b25_enable)
+										m_pTsReaderArg->b25.init();
 									m_hTsRead = ::CreateThread(NULL, 0, cProxyServerEx::TsReader, m_pTsReaderArg, 0, NULL);
 									if (m_hTsRead == NULL)
 									{
@@ -1335,10 +1346,18 @@ DWORD WINAPI cProxyServerEx::TsReader(LPVOID pv)
 			{
 				fSignalLevel = pIBon->GetSignalLevel();
 				before = now;
+				if (ChannelChanged)
+					pArg->b25.reset();
 				ChannelChanged = FALSE;
 			}
 			if (pIBon->GetTsStream(&pBuf, &dwSize, &dwRemain) && (dwSize != 0))
 			{
+				if (g_b25_enable)
+				{
+					pArg->b25.decode(pBuf, dwSize, &pBuf, &dwSize);
+					if (dwSize == 0)
+						goto next;
+				}
 				if ((pos + dwSize) < TsPacketBufSize)
 				{
 					::memcpy(&pTsBuf[pos], pBuf, dwSize);
@@ -1392,6 +1411,7 @@ DWORD WINAPI cProxyServerEx::TsReader(LPVOID pv)
 				}
 			}
 		}
+	next:
 		if (dwRemain == 0)
 			::Sleep(WAIT_TIME);
 	}
