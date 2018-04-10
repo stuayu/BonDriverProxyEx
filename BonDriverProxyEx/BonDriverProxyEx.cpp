@@ -1344,10 +1344,10 @@ DWORD WINAPI cProxyServerEx::TsReader(LPVOID pv)
 			LOCK(TsLock);
 			if ((((now = ::GetTickCount()) - before) >= 1000) || ChannelChanged)
 			{
-				fSignalLevel = pIBon->GetSignalLevel();
-				before = now;
 				if (ChannelChanged)
 					pArg->b25.reset();
+				fSignalLevel = pIBon->GetSignalLevel();
+				before = now;
 				ChannelChanged = FALSE;
 			}
 			if (pIBon->GetTsStream(&pBuf, &dwSize, &dwRemain) && (dwSize != 0))
