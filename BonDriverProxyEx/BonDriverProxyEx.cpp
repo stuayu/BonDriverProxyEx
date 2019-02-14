@@ -18,6 +18,13 @@ HWND g_hWnd;
 HMENU g_hMenu;
 #endif
 
+#ifdef USE_B25_DECODER_DLL
+int B25DecoderAdapter::strip        = 1;
+int B25DecoderAdapter::emm_proc     = 0;
+int B25DecoderAdapter::multi2_round = 4;
+using B25Decoder = B25DecoderAdapter;
+#endif // USE_B25_DECODER_DLL
+
 static int g_b25_enable;
 
 static int Init(HMODULE hModule)
@@ -105,9 +112,31 @@ static int Init(HMODULE hModule)
 		// [BONDRIVER]
 		// 00=PT-T;BonDriver_PT3-T0.dll;BonDriver_PT3-T1.dll
 		// 01=PT-S;BonDriver_PT3-S0.dll;BonDriver_PT3-S1.dll
+		// DIR_PATH=C:\BonDriverProxyEx\BonDriver
 		int cntD, cntT = 0;
-		char *str, *pos, *pp[MAX_DRIVERS], **ppDriver;
+		size_t dirPathLen, bufLen = 0U;
+		char *str, *strPath, *pos, *pp[MAX_DRIVERS], **ppDriver;
 		char tag[4], buf[MAX_PATH * 4];
+		char lastChr = '\0';
+		GetPrivateProfileStringA("BONDRIVER", "DIR_PATH", "", g_DriverDir, sizeof(g_DriverDir), szIniPath);
+		dirPathLen = strlen(g_DriverDir);
+		if (dirPathLen)
+		{
+			lastChr = g_DriverDir[dirPathLen-1];
+			if (lastChr != '\\' && lastChr != '/')
+			{
+				if (dirPathLen + 1 >= sizeof(g_DriverDir))
+				{
+					g_DriverDir[0] = '\0';
+					dirPathLen = 0;
+				}
+				else
+				{
+					g_DriverDir[dirPathLen] = '\\';
+					++dirPathLen;
+				}
+			}
+		}
 		for (int i = 0; i < MAX_DRIVERS; i++)
 		{
 			tag[0] = (char)('0' + (i / 10));
@@ -122,7 +151,8 @@ static int Init(HMODULE hModule)
 
 			// format: GroupName;BonDriver1;BonDriver2;BonDriver3...
 			// e.g.  : PT-T;BonDriver_PT3-T0.dll;BonDriver_PT3-T1.dll
-			str = new char[strlen(buf) + 1];
+			bufLen = strlen(buf);
+			str = new char[bufLen + 1];
 			strcpy(str, buf);
 			pos = pp[0] = str;
 			cntD = 1;
@@ -144,16 +174,34 @@ static int Init(HMODULE hModule)
 				delete[] str;
 				continue;
 			}
+			else if (dirPathLen)
+			{
+				pp[cntD] = NULL;
+				strPath = new char[(dirPathLen * (cntD-1)) + bufLen + 1];
+				strcpy(strPath, str);
+				pp[0] = strPath;
+				p = &strPath[strlen(strPath)];
+				pos = pp[1];
+				for (int j = 1; pos != NULL;)
+				{
+					++p;
+					memcpy(p, g_DriverDir, dirPathLen);
+					memcpy(p + dirPathLen, pos, strlen(pos) + 1);
+					pp[j] = p;
+					p += strlen(p);
+					pos = pp[++j];
+				}
+				delete[] str;
+			}
 			ppDriver = g_ppDriver[cntT++] = new char *[cntD];
 			memcpy(ppDriver, pp, sizeof(char *) * cntD);
-			std::vector<stDriver> vstDriver(cntD - 1);
+			std::vector<stDriver> &vstDriver = DriversMap.emplace(ppDriver[0], cntD - 1).first->second;
 			for (int j = 1; j < cntD; j++)
 			{
 				vstDriver[j-1].strBonDriver = ppDriver[j];
 				vstDriver[j-1].hModule = NULL;
 				vstDriver[j-1].bUsed = FALSE;
 			}
-			DriversMap[ppDriver[0]] = vstDriver;
 		}
 	}
 
@@ -163,7 +211,7 @@ static int Init(HMODULE hModule)
 		if (g_ppDriver[i] == NULL)
 			break;
 		_RPT2(_CRT_WARN, "%02d: %s\n", i, g_ppDriver[i][0]);
-		std::vector<stDriver> &v = DriversMap[g_ppDriver[i][0]];
+		std::vector<stDriver> &v = DriversMap.at(g_ppDriver[i][0]);
 		for (size_t j = 0; j < v.size(); j++)
 			_RPT1(_CRT_WARN, "  : %s\n", v[j].strBonDriver);
 	}
@@ -221,7 +269,7 @@ static void CleanUp()
 	{
 		if (g_ppDriver[i] == NULL)
 			break;
-		std::vector<stDriver> &v = DriversMap[g_ppDriver[i][0]];
+		std::vector<stDriver> &v = DriversMap.at(g_ppDriver[i][0]);
 		for (size_t j = 0; j < v.size(); j++)
 		{
 			if (v[j].hModule != NULL)
@@ -279,7 +327,7 @@ cProxyServerEx::~cProxyServerEx()
 
 		if (m_hModule)
 		{
-			std::vector<stDriver> &vstDriver = DriversMap[m_pDriversMapKey];
+			std::vector<stDriver> &vstDriver = DriversMap.at(m_pDriversMapKey);
 			vstDriver[m_iDriverNo].bUsed = FALSE;
 			if (!g_DisableUnloadBonDriver)
 			{
@@ -428,18 +476,18 @@ DWORD cProxyServerEx::Process()
 				if (m_pIBon == NULL)
 				{
 					BOOL bFind = FALSE;
-					for (std::list<cProxyServerEx *>::iterator it = g_InstanceList.begin(); it != g_InstanceList.end(); ++it)
+					for (auto pInstance : g_InstanceList)
 					{
-						if (*it == this)
+						if (pInstance == this)
 							continue;
-						if (m_hModule == (*it)->m_hModule)
+						if (m_hModule == pInstance->m_hModule)
 						{
-							if ((*it)->m_pIBon != NULL)
+							if (pInstance->m_pIBon != NULL)
 							{
 								bFind = TRUE;	// ここに来るのはかなりのレアケースのハズ
-								m_pIBon = (*it)->m_pIBon;
-								m_pIBon2 = (*it)->m_pIBon2;
-								m_pIBon3 = (*it)->m_pIBon3;
+								m_pIBon = pInstance->m_pIBon;
+								m_pIBon2 = pInstance->m_pIBon2;
+								m_pIBon3 = pInstance->m_pIBon3;
 								break;
 							}
 							// ここに来るのは上より更にレアケース
@@ -469,13 +517,13 @@ DWORD cProxyServerEx::Process()
 			{
 				BOOL bFind = FALSE;
 				{
-					for (std::list<cProxyServerEx *>::iterator it = g_InstanceList.begin(); it != g_InstanceList.end(); ++it)
+					for (auto pInstance : g_InstanceList)
 					{
-						if (*it == this)
+						if (pInstance == this)
 							continue;
-						if ((m_pIBon != NULL) && (m_pIBon == (*it)->m_pIBon))
+						if ((m_pIBon != NULL) && (m_pIBon == pInstance->m_pIBon))
 						{
-							if ((*it)->m_bTunerOpen)
+							if (pInstance->m_bTunerOpen)
 							{
 								bFind = TRUE;
 								m_bTunerOpen = TRUE;
@@ -493,13 +541,13 @@ DWORD cProxyServerEx::Process()
 			case eCloseTuner:
 			{
 				BOOL bFind = FALSE;
-				for (std::list<cProxyServerEx *>::iterator it = g_InstanceList.begin(); it != g_InstanceList.end(); ++it)
+				for (auto pInstance : g_InstanceList)
 				{
-					if (*it == this)
+					if (pInstance == this)
 						continue;
-					if ((m_pIBon != NULL) && (m_pIBon == (*it)->m_pIBon))
+					if ((m_pIBon != NULL) && (m_pIBon == pInstance->m_pIBon))
 					{
-						if ((*it)->m_bTunerOpen)
+						if (pInstance->m_bTunerOpen)
 						{
 							bFind = TRUE;
 							break;
@@ -609,15 +657,13 @@ DWORD cProxyServerEx::Process()
 								// 現在の配信リストには優先度255のインスタンスが既にいるか？
 								BOOL bFind = FALSE;
 								m_pTsReaderArg->TsLock.Enter();
-								std::list<cProxyServerEx *>::iterator it = m_pTsReaderArg->TsReceiversList.begin();
-								while (it != m_pTsReaderArg->TsReceiversList.end())
+								for (auto pReceiver : m_pTsReaderArg->TsReceiversList)
 								{
-									if ((*it != this) && ((*it)->m_bChannelLock == 0xff))
+									if ((pReceiver != this) && (pReceiver->m_bChannelLock == 0xff))
 									{
 										bFind = TRUE;
 										break;
 									}
-									++it;
 								}
 								m_pTsReaderArg->TsLock.Leave();
 								if (bFind)
@@ -626,15 +672,13 @@ DWORD cProxyServerEx::Process()
 									bChannelLock = 0xfe;
 									// 排他権取得待ちリストにまだ自身が含まれていなければ追加
 									bFind = FALSE;
-									it = m_pTsReaderArg->WaitExclusivePrivList.begin();
-									while (it != m_pTsReaderArg->WaitExclusivePrivList.end())
+									for (auto pPriv : m_pTsReaderArg->WaitExclusivePrivList)
 									{
-										if (*it == this)
+										if (pPriv == this)
 										{
 											bFind = TRUE;
 											break;
 										}
-										++it;
 									}
 									if (!bFind)
 										m_pTsReaderArg->WaitExclusivePrivList.push_back(this);
@@ -654,19 +698,19 @@ DWORD cProxyServerEx::Process()
 						BOOL bShared = FALSE;
 						BOOL bSetChannel = FALSE;
 						cProxyServerEx *pHavePriv = NULL;
-						for (std::list<cProxyServerEx *>::iterator it = g_InstanceList.begin(); it != g_InstanceList.end(); ++it)
+						for (auto pInstance1 : g_InstanceList)
 						{
-							if (*it == this)
+							if (pInstance1 == this)
 								continue;
 							// ひとまず現在のインスタンスが共有されているかどうかを確認しておく
-							if ((m_pIBon != NULL) && (m_pIBon == (*it)->m_pIBon))
+							if ((m_pIBon != NULL) && (m_pIBon == pInstance1->m_pIBon))
 								bShared = TRUE;
 
 							// 対象BonDriver群の中でチューナをオープンしているもの
-							if (m_pDriversMapKey == (*it)->m_pDriversMapKey && (*it)->m_pIBon != NULL && (*it)->m_bTunerOpen)
+							if (m_pDriversMapKey == pInstance1->m_pDriversMapKey && pInstance1->m_pIBon != NULL && pInstance1->m_bTunerOpen)
 							{
 								// かつクライアントからの要求と同一チャンネルを選択しているもの
-								if ((*it)->m_dwSpace == dwReqSpace && (*it)->m_dwChannel == dwReqChannel)
+								if (pInstance1->m_dwSpace == dwReqSpace && pInstance1->m_dwChannel == dwReqChannel)
 								{
 									// 今クライアントがオープンしているチューナに関して
 									if (m_pIBon != NULL)
@@ -674,17 +718,17 @@ DWORD cProxyServerEx::Process()
 										BOOL bModule = FALSE;
 										BOOL bIBon = FALSE;
 										BOOL bTuner = FALSE;
-										for (std::list<cProxyServerEx *>::iterator it2 = g_InstanceList.begin(); it2 != g_InstanceList.end(); ++it2)
+										for (auto pInstance2 : g_InstanceList)
 										{
-											if (*it2 == this)
+											if (pInstance2 == this)
 												continue;
-											if (m_hModule == (*it2)->m_hModule)
+											if (m_hModule == pInstance2->m_hModule)
 											{
 												bModule = TRUE;	// モジュール使用者有り
-												if (m_pIBon == (*it2)->m_pIBon)
+												if (m_pIBon == pInstance2->m_pIBon)
 												{
 													bIBon = TRUE;	// インスタンス使用者有り
-													if ((*it2)->m_bTunerOpen)
+													if (pInstance2->m_bTunerOpen)
 													{
 														bTuner = TRUE;	// チューナ使用者有り
 														break;
@@ -715,7 +759,7 @@ DWORD cProxyServerEx::Process()
 												// かつモジュール使用者も無しならモジュールリリース
 												if (!bModule)
 												{
-													std::vector<stDriver> &vstDriver = DriversMap[m_pDriversMapKey];
+													std::vector<stDriver> &vstDriver = DriversMap.at(m_pDriversMapKey);
 													vstDriver[m_iDriverNo].bUsed = FALSE;
 													if (!g_DisableUnloadBonDriver)
 													{
@@ -738,18 +782,18 @@ DWORD cProxyServerEx::Process()
 									if (bChannelLock == 0xff)
 									{
 										// 切り替え先チューナに対して優先度255のインスタンスが既にいるか？
-										for (std::list<cProxyServerEx *>::iterator it2 = g_InstanceList.begin(); it2 != g_InstanceList.end(); ++it2)
+										for (auto pInstance2 : g_InstanceList)
 										{
-											if (*it2 == this)
+											if (pInstance2 == this)
 												continue;
-											if ((*it2)->m_pIBon == (*it)->m_pIBon)
+											if (pInstance2->m_pIBon == pInstance1->m_pIBon)
 											{
-												if ((*it2)->m_bChannelLock == 0xff)
+												if (pInstance2->m_bChannelLock == 0xff)
 												{
 													// いた場合は、このインスタンスの優先度を暫定的に254にする
 													// (そうしないと、優先度255のインスタンスもチャンネル変更できなくなる為)
 													bChannelLock = 0xfe;
-													pHavePriv = *it2;
+													pHavePriv = pInstance2;
 													break;
 												}
 											}
@@ -757,14 +801,14 @@ DWORD cProxyServerEx::Process()
 									}
 
 									// インスタンス切り替え
-									m_hModule = (*it)->m_hModule;
-									m_iDriverNo = (*it)->m_iDriverNo;
-									m_pIBon = (*it)->m_pIBon;
-									m_pIBon2 = (*it)->m_pIBon2;
-									m_pIBon3 = (*it)->m_pIBon3;
+									m_hModule = pInstance1->m_hModule;
+									m_iDriverNo = pInstance1->m_iDriverNo;
+									m_pIBon = pInstance1->m_pIBon;
+									m_pIBon2 = pInstance1->m_pIBon2;
+									m_pIBon3 = pInstance1->m_pIBon3;
 									m_bTunerOpen = TRUE;
-									m_hTsRead = (*it)->m_hTsRead;	// この時点でもNULLの可能性はゼロではない
-									m_pTsReaderArg = (*it)->m_pTsReaderArg;
+									m_hTsRead = pInstance1->m_hTsRead;	// この時点でもNULLの可能性はゼロではない
+									m_pTsReaderArg = pInstance1->m_pTsReaderArg;
 									if (m_hTsRead)
 									{
 										m_pTsReaderArg->TsLock.Enter();
@@ -782,15 +826,13 @@ DWORD cProxyServerEx::Process()
 										{
 											// 排他権取得待ちリストにまだ自身が含まれていなければ追加
 											BOOL bFind = FALSE;
-											std::list<cProxyServerEx *>::iterator it2 = m_pTsReaderArg->WaitExclusivePrivList.begin();
-											while (it2 != m_pTsReaderArg->WaitExclusivePrivList.end())
+											for (auto pPriv : m_pTsReaderArg->WaitExclusivePrivList)
 											{
-												if (*it2 == this)
+												if (pPriv == this)
 												{
 													bFind = TRUE;
 													break;
 												}
-												++it2;
 											}
 											if (!bFind)
 												m_pTsReaderArg->WaitExclusivePrivList.push_back(this);
@@ -846,22 +888,22 @@ DWORD cProxyServerEx::Process()
 							}
 
 							// 使用チューナのチャンネルロック状態確認
-							for (std::list<cProxyServerEx *>::iterator it = g_InstanceList.begin(); it != g_InstanceList.end(); ++it)
+							for (auto pInstance : g_InstanceList)
 							{
-								if (*it == this)
+								if (pInstance == this)
 									continue;
-								if (m_pIBon == (*it)->m_pIBon)
+								if (m_pIBon == pInstance->m_pIBon)
 								{
-									if ((*it)->m_bChannelLock > bChannelLock)
+									if (pInstance->m_bChannelLock > bChannelLock)
 										bLocked = TRUE;
-									else if ((*it)->m_bChannelLock == 0xff)
+									else if (pInstance->m_bChannelLock == 0xff)
 									{
 										// 対象チューナに対して優先度255のインスタンスが既にいる状態で、このインスタンスが
 										// 要求している優先度も255の場合、このインスタンスの優先度を暫定的に254にする
 										// (そうしないと、優先度255のインスタンスもチャンネル変更できなくなる為)
 										bChannelLock = 0xfe;
 										bLocked = TRUE;
-										pHavePriv = *it;
+										pHavePriv = pInstance;
 									}
 									if (bLocked)
 										break;
@@ -874,15 +916,13 @@ DWORD cProxyServerEx::Process()
 								{
 									// 排他権取得待ちリストにまだ自身が含まれていなければ追加
 									BOOL bFind = FALSE;
-									std::list<cProxyServerEx *>::iterator it = m_pTsReaderArg->WaitExclusivePrivList.begin();
-									while (it != m_pTsReaderArg->WaitExclusivePrivList.end())
+									for (auto pPriv : m_pTsReaderArg->WaitExclusivePrivList)
 									{
-										if (*it == this)
+										if (pPriv == this)
 										{
 											bFind = TRUE;
 											break;
 										}
-										++it;
 									}
 									if (!bFind)
 										m_pTsReaderArg->WaitExclusivePrivList.push_back(this);
@@ -947,8 +987,17 @@ DWORD cProxyServerEx::Process()
 									m_pTsReaderArg = new stTsReaderArg();
 									m_pTsReaderArg->TsReceiversList.push_back(this);
 									m_pTsReaderArg->pIBon = m_pIBon;
-									if (g_b25_enable)
+									const BOOL bDesiredUseB25 = static_cast<BOOL>(pPh->m_pPacket->head.m_bReserved1 & eDesireToUseB25);
+									if (bDesiredUseB25 && g_b25_enable)
+									{
+#ifdef USE_B25_DECODER_DLL
+										if (m_pTsReaderArg->b25.load() == FALSE)
+											g_b25_enable = FALSE;
+#else
 										m_pTsReaderArg->b25.init();
+#endif // USE_B25_DECODER_DLL
+									}
+									m_pTsReaderArg->bB25Enable = bDesiredUseB25 && g_b25_enable;
 									m_hTsRead = ::CreateThread(NULL, 0, cProxyServerEx::TsReader, m_pTsReaderArg, 0, NULL);
 									if (m_hTsRead == NULL)
 									{
@@ -962,25 +1011,25 @@ DWORD cProxyServerEx::Process()
 								if (bSetChannel)
 								{
 									// SetChannel()が行われた場合は、同一BonDriverインスタンスを使用しているインスタンスの保持チャンネルを変更
-									for (std::list<cProxyServerEx *>::iterator it = g_InstanceList.begin(); it != g_InstanceList.end(); ++it)
+									for (auto pInstance : g_InstanceList)
 									{
-										if (*it == this)
+										if (pInstance == this)
 											continue;
-										if (m_pIBon == (*it)->m_pIBon)
+										if (m_pIBon == pInstance->m_pIBon)
 										{
-											(*it)->m_dwSpace = dwReqSpace;
-											(*it)->m_dwChannel = dwReqChannel;
+											pInstance->m_dwSpace = dwReqSpace;
+											pInstance->m_dwChannel = dwReqChannel;
 											// 対象インスタンスがまだ一度もSetChannel()を行っていなかった場合
-											if ((*it)->m_hTsRead == NULL)
+											if (pInstance->m_hTsRead == NULL)
 											{
 												// 強制的に配信開始
-												(*it)->m_bTunerOpen = TRUE;
-												(*it)->m_hTsRead = m_hTsRead;
-												(*it)->m_pTsReaderArg = m_pTsReaderArg;
+												pInstance->m_bTunerOpen = TRUE;
+												pInstance->m_hTsRead = m_hTsRead;
+												pInstance->m_pTsReaderArg = m_pTsReaderArg;
 												if (m_hTsRead)
 												{
 													m_pTsReaderArg->TsLock.Enter();
-													m_pTsReaderArg->TsReceiversList.push_back(*it);
+													m_pTsReaderArg->TsReceiversList.push_back(pInstance);
 													m_pTsReaderArg->TsLock.Leave();
 												}
 											}
@@ -1030,32 +1079,21 @@ DWORD cProxyServerEx::Process()
 				p[0] = '\0';
 				left = size = sizeof(info);
 				exinfo = NULL;
-				std::list<cProxyServerEx *>::iterator it = g_InstanceList.begin();
-				while (it != g_InstanceList.end())
+				for (auto pInstance : g_InstanceList)
 				{
 					len = sizeof(ss);
-					if (::getpeername((*it)->m_s, (SOCKADDR *)&ss, &len) == 0)
+					if (::getpeername(pInstance->m_s, (SOCKADDR *)&ss, &len) == 0)
 					{
 						if (ss.ss_family == AF_INET)
 						{
 							// IPv4
-#ifdef _WIN64
 							::inet_ntop(AF_INET, &(si4.sin_addr), addr, sizeof(addr));
-#else
-							::lstrcpyA(addr, ::inet_ntoa(si4.sin_addr));
-#endif
 							port = ::ntohs(si4.sin_port);
 						}
 						else
 						{
 							// IPv6
-#ifdef _WIN64
 							::inet_ntop(AF_INET6, &(si6.sin6_addr), addr, sizeof(addr));
-#else
-							char *cp = addr;
-							for (int i = 0; i < 16; i += 2)
-								cp += ::wsprintfA(cp, "%02x%02x%c", si6.sin6_addr.s6_addr[i], si6.sin6_addr.s6_addr[i + 1], (i != 14) ? ':' : '\0');
-#endif
 							port = ::ntohs(si6.sin6_port);
 						}
 					}
@@ -1064,8 +1102,8 @@ DWORD cProxyServerEx::Process()
 						::lstrcpyA(addr, "unknown host...");
 						port = 0;
 					}
-					std::vector<stDriver> &vstDriver = DriversMap[(*it)->m_pDriversMapKey];
-					len = ::wsprintfA(buf, "%02d: [%s]:[%d] / [%s][%s] / space[%u] ch[%u]\n", num, addr, port, (*it)->m_pDriversMapKey, vstDriver[(*it)->m_iDriverNo].strBonDriver, (*it)->m_dwSpace, (*it)->m_dwChannel);
+					std::vector<stDriver> &vstDriver = DriversMap.at(pInstance->m_pDriversMapKey);
+					len = ::wsprintfA(buf, "%02d: [%s]:[%d] / [%s][%s] / space[%u] ch[%u]\n", num, addr, port, pInstance->m_pDriversMapKey, vstDriver[pInstance->m_iDriverNo].strBonDriver, pInstance->m_dwSpace, pInstance->m_dwChannel);
 					if ((size_t)len >= left)
 					{
 						left += size;
@@ -1088,7 +1126,6 @@ DWORD cProxyServerEx::Process()
 					p += len;
 					left -= len;
 					num++;
-					++it;
 				}
 				if (exinfo != NULL)
 				{
@@ -1320,8 +1357,8 @@ DWORD WINAPI cProxyServerEx::TsReader(LPVOID pv)
 {
 	stTsReaderArg *pArg = static_cast<stTsReaderArg *>(pv);
 	IBonDriver *pIBon = pArg->pIBon;
-	volatile BOOL &StopTsRead = pArg->StopTsRead;
-	volatile BOOL &ChannelChanged = pArg->ChannelChanged;
+	std::atomic<BOOL> &StopTsRead = pArg->StopTsRead;
+	std::atomic<BOOL> &ChannelChanged = pArg->ChannelChanged;
 	DWORD &pos = pArg->pos;
 	std::list<cProxyServerEx *> &TsReceiversList = pArg->TsReceiversList;
 	cCriticalSection &TsLock = pArg->TsLock;
@@ -1344,7 +1381,7 @@ DWORD WINAPI cProxyServerEx::TsReader(LPVOID pv)
 			LOCK(TsLock);
 			if ((((now = ::GetTickCount()) - before) >= 1000) || ChannelChanged)
 			{
-				if (ChannelChanged)
+				if (pArg->IsB25Enabled() && ChannelChanged)
 					pArg->b25.reset();
 				fSignalLevel = pIBon->GetSignalLevel();
 				before = now;
@@ -1352,7 +1389,7 @@ DWORD WINAPI cProxyServerEx::TsReader(LPVOID pv)
 			}
 			if (pIBon->GetTsStream(&pBuf, &dwSize, &dwRemain) && (dwSize != 0))
 			{
-				if (g_b25_enable)
+				if (pArg->IsB25Enabled())
 				{
 					pArg->b25.decode(pBuf, dwSize, &pBuf, &dwSize);
 					if (dwSize == 0)
@@ -1364,8 +1401,8 @@ DWORD WINAPI cProxyServerEx::TsReader(LPVOID pv)
 					pos += dwSize;
 					if (dwRemain == 0)
 					{
-						for (std::list<cProxyServerEx *>::iterator it = TsReceiversList.begin(); it != TsReceiversList.end(); ++it)
-							(*it)->makePacket(eGetTsStream, pTsBuf, pos, fSignalLevel);
+						for (auto &&receiver : TsReceiversList)
+							receiver->makePacket(eGetTsStream, pTsBuf, pos, fSignalLevel);
 #if _DEBUG && DETAILLOG
 						_RPT3(_CRT_WARN, "makePacket0() : %u : size[%x] / dwRemain[%d]\n", Counter++, pos, dwRemain);
 #endif
@@ -1376,8 +1413,8 @@ DWORD WINAPI cProxyServerEx::TsReader(LPVOID pv)
 				{
 					DWORD left, dwLen = TsPacketBufSize - pos;
 					::memcpy(&pTsBuf[pos], pBuf, dwLen);
-					for (std::list<cProxyServerEx *>::iterator it = TsReceiversList.begin(); it != TsReceiversList.end(); ++it)
-						(*it)->makePacket(eGetTsStream, pTsBuf, TsPacketBufSize, fSignalLevel);
+					for (auto &&receiver : TsReceiversList)
+						receiver->makePacket(eGetTsStream, pTsBuf, TsPacketBufSize, fSignalLevel);
 #if _DEBUG && DETAILLOG
 					_RPT3(_CRT_WARN, "makePacket1() : %u : size[%x] / dwRemain[%d]\n", Counter++, TsPacketBufSize, dwRemain);
 #endif
@@ -1385,8 +1422,8 @@ DWORD WINAPI cProxyServerEx::TsReader(LPVOID pv)
 					pBuf += dwLen;
 					while (left >= TsPacketBufSize)
 					{
-						for (std::list<cProxyServerEx *>::iterator it = TsReceiversList.begin(); it != TsReceiversList.end(); ++it)
-							(*it)->makePacket(eGetTsStream, pBuf, TsPacketBufSize, fSignalLevel);
+						for (auto &&receiver : TsReceiversList)
+							receiver->makePacket(eGetTsStream, pBuf, TsPacketBufSize, fSignalLevel);
 #if _DEBUG && DETAILLOG
 						_RPT2(_CRT_WARN, "makePacket2() : %u : size[%x]\n", Counter++, TsPacketBufSize);
 #endif
@@ -1397,8 +1434,8 @@ DWORD WINAPI cProxyServerEx::TsReader(LPVOID pv)
 					{
 						if (dwRemain == 0)
 						{
-							for (std::list<cProxyServerEx *>::iterator it = TsReceiversList.begin(); it != TsReceiversList.end(); ++it)
-								(*it)->makePacket(eGetTsStream, pBuf, left, fSignalLevel);
+							for (auto &&receiver : TsReceiversList)
+								receiver->makePacket(eGetTsStream, pBuf, left, fSignalLevel);
 #if _DEBUG && DETAILLOG
 							_RPT3(_CRT_WARN, "makePacket3() : %u : size[%x] / dwRemain[%d]\n", Counter++, left, dwRemain);
 #endif
@@ -1474,12 +1511,12 @@ BOOL cProxyServerEx::SelectBonDriver(LPCSTR p, BYTE bChannelLock)
 {
 	char *pKey = NULL;
 	std::vector<stDriver> *pvstDriver = NULL;
-	for (std::map<char *, std::vector<stDriver> >::iterator it = DriversMap.begin(); it != DriversMap.end(); ++it)
+	for (auto &&pair : DriversMap)
 	{
-		if (::strcmp(p, it->first) == 0)
+		if (::strcmp(p, pair.first) == 0)
 		{
-			pKey = it->first;
-			pvstDriver = &(it->second);
+			pKey = pair.first;
+			pvstDriver = &(pair.second);
 			break;
 		}
 	}
@@ -1552,31 +1589,31 @@ BOOL cProxyServerEx::SelectBonDriver(LPCSTR p, BYTE bChannelLock)
 	// 同値の物が複数あった場合はBonDriverのロード時刻(もしくは使用要求時刻)が古い物を優先
 	cProxyServerEx *pCandidate = NULL;
 	std::vector<cProxyServerEx *> vpCandidate;
-	for (std::list<cProxyServerEx *>::iterator it = g_InstanceList.begin(); it != g_InstanceList.end(); ++it)
+	for (auto pInstance1 : g_InstanceList)
 	{
-		if (*it == this)
+		if (pInstance1 == this)
 			continue;
-		if (pKey == (*it)->m_pDriversMapKey)	// この段階では文字列比較である必要は無い
+		if (pKey == pInstance1->m_pDriversMapKey)	// この段階では文字列比較である必要は無い
 		{
 			// 候補リストに既に入れているなら以後のチェックは不要
 			for (i = 0; i < (int)vpCandidate.size(); i++)
 			{
-				if (vpCandidate[i]->m_hModule == (*it)->m_hModule)
+				if (vpCandidate[i]->m_hModule == pInstance1->m_hModule)
 					break;
 			}
 			if (i != (int)vpCandidate.size())
 				continue;
 			// 暫定候補
-			pCandidate = *it;
+			pCandidate = pInstance1;
 			// この暫定候補が使用しているインスタンスはロックされているか？
 			BOOL bLocked = FALSE;
-			for (std::list<cProxyServerEx *>::iterator it2 = g_InstanceList.begin(); it2 != g_InstanceList.end(); ++it2)
+			for (auto pInstance2 : g_InstanceList)
 			{
-				if (*it2 == this)
+				if (pInstance2 == this)
 					continue;
-				if (pCandidate->m_hModule == (*it2)->m_hModule)
+				if (pCandidate->m_hModule == pInstance2->m_hModule)
 				{
-					if (((*it2)->m_bChannelLock > bChannelLock) || ((*it2)->m_bChannelLock == 0xff))	// ロックされてた
+					if ((pInstance2->m_bChannelLock > bChannelLock) || (pInstance2->m_bChannelLock == 0xff))	// ロックされてた
 					{
 						bLocked = TRUE;
 						break;
@@ -1608,14 +1645,14 @@ BOOL cProxyServerEx::SelectBonDriver(LPCSTR p, BYTE bChannelLock)
 			for (i = 0; i < (int)vpCandidate.size(); i++)
 			{
 				bGroupMaxPriv = 0;
-				for (std::list<cProxyServerEx *>::iterator it = g_InstanceList.begin(); it != g_InstanceList.end(); ++it)
+				for (auto pInstance : g_InstanceList)
 				{
-					if (*it == this)
+					if (pInstance == this)
 						continue;
-					if (vpCandidate[i]->m_hModule == (*it)->m_hModule)
+					if (vpCandidate[i]->m_hModule == pInstance->m_hModule)
 					{
-						if ((*it)->m_bChannelLock > bGroupMaxPriv)
-							bGroupMaxPriv = (*it)->m_bChannelLock;
+						if (pInstance->m_bChannelLock > bGroupMaxPriv)
+							bGroupMaxPriv = pInstance->m_bChannelLock;
 					}
 				}
 				vbGroupMaxPriv[i] = bGroupMaxPriv;
@@ -1623,7 +1660,7 @@ BOOL cProxyServerEx::SelectBonDriver(LPCSTR p, BYTE bChannelLock)
 					bMinPriv = bGroupMaxPriv;
 			}
 			std::vector<cProxyServerEx *> vpCandidate2;
-			for (i = 0; i < (int)vpCandidate.size(); i++)
+			for (i = 0; i < (int)vpCandidate.size(); ++i)
 			{
 #if _DEBUG && DETAILLOG2
 				_RPT2(_CRT_WARN, "                      : vbGroupMaxPriv[%d] : [%d]\n", i, vbGroupMaxPriv[i]);
@@ -1637,7 +1674,7 @@ BOOL cProxyServerEx::SelectBonDriver(LPCSTR p, BYTE bChannelLock)
 			// eSetChannel2からの呼び出しの場合
 			if (m_pIBon)
 			{
-				for (i = 0; i < (int)vpCandidate2.size(); i++)
+				for (i = 0; i < (int)vpCandidate2.size(); ++i)
 				{
 					// この時点での候補リストに現在のインスタンスが含まれていた場合は
 					if (m_hModule == vpCandidate2[i]->m_hModule)
@@ -2035,32 +2072,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 		int port, len, num = 0;
 		char buf[2048];
 		g_Lock.Enter();
-		std::list<cProxyServerEx *>::iterator it = g_InstanceList.begin();
-		while (it != g_InstanceList.end())
+		for (auto pInstance : g_InstanceList)
 		{
 			len = sizeof(ss);
-			if (getpeername((*it)->m_s, (SOCKADDR *)&ss, &len) == 0)
+			if (getpeername(pInstance->m_s, (SOCKADDR *)&ss, &len) == 0)
 			{
 				if (ss.ss_family == AF_INET)
 				{
 					// IPv4
-#ifdef _WIN64
 					inet_ntop(AF_INET, &(si4.sin_addr), addr, sizeof(addr));
-#else
-					lstrcpyA(addr, inet_ntoa(si4.sin_addr));
-#endif
 					port = ntohs(si4.sin_port);
 				}
 				else
 				{
 					// IPv6
-#ifdef _WIN64
 					inet_ntop(AF_INET6, &(si6.sin6_addr), addr, sizeof(addr));
-#else
-					char *p = addr;
-					for (int i = 0; i < 16; i += 2)
-						p += wsprintfA(p, "%02x%02x%c", si6.sin6_addr.s6_addr[i], si6.sin6_addr.s6_addr[i + 1], (i != 14) ? ':' : '\0');
-#endif
 					port = ntohs(si6.sin6_port);
 				}
 			}
@@ -2069,11 +2095,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 				lstrcpyA(addr, "unknown host...");
 				port = 0;
 			}
-			std::vector<stDriver> &vstDriver = DriversMap[(*it)->m_pDriversMapKey];
-			wsprintfA(buf, "%02d: [%s]:[%d] / [%s][%s] / space[%u] ch[%u]", num, addr, port, (*it)->m_pDriversMapKey, vstDriver[(*it)->m_iDriverNo].strBonDriver, (*it)->m_dwSpace, (*it)->m_dwChannel);
+			std::vector<stDriver> &vstDriver = DriversMap.at(pInstance->m_pDriversMapKey);
+			wsprintfA(buf, "%02d: [%s]:[%d] / [%s][%s] / space[%u] ch[%u]", num, addr, port, pInstance->m_pDriversMapKey, vstDriver[pInstance->m_iDriverNo].strBonDriver, pInstance->m_dwSpace, pInstance->m_dwChannel);
 			TextOutA(hDc, 5, 5 + (num * tm.tmHeight), buf, lstrlenA(buf));
 			num++;
-			++it;
 		}
 		g_Lock.Leave();
 		EndPaint(hWnd, &ps);
@@ -2116,7 +2141,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 
 		case ID_TASKTRAY_RELOAD:
 		{
-			if (g_InstanceList.size() != 0)
+			if (!g_InstanceList.empty())
 			{
 				if (MessageBox(hWnd, _T("接続中のクライアントが存在しています。切断されますがよろしいですか？"), _T("Caution"), MB_YESNO) != IDYES)
 					return 0;
@@ -2145,7 +2170,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 
 		case ID_TASKTRAY_EXIT:
 		{
-			if (g_InstanceList.size() != 0)
+			if (!g_InstanceList.empty())
 			{
 				if (MessageBox(hWnd, _T("接続中のクライアントが存在していますが、よろしいですか？"), _T("Caution"), MB_YESNO) != IDYES)
 					return 0;

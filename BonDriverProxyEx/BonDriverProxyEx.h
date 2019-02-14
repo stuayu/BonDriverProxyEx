@@ -1,15 +1,23 @@
 #ifndef __BONDRIVER_PROXYEX_H__
 #define __BONDRIVER_PROXYEX_H__
+
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <tchar.h>
 #include <process.h>
 #include <list>
 #include <queue>
-#include <map>
+#include <unordered_map>
+#include <atomic>
+#include <typeinfo>
 #include "Common.h"
 #include "IBonDriver3.h"
+#ifdef USE_B25_DECODER_DLL
+#include "B25Decoder/IB25Decoder.h"
+#include "B25Decoder/B25DecoderAdapter.h"
+#else
 #include "aribb25/B25Decoder.h"
+#endif // USE_B25_DECODER_DLL
 
 #define HAVE_UI
 #ifdef BUILD_AS_SERVICE
@@ -29,6 +37,7 @@
 #define MAX_HOSTS	8	// listen()できるソケットの最大数
 static char g_Host[512];
 static char g_Port[8];
+static char g_DriverDir[MAX_PATH + 16];
 static size_t g_PacketFifoSize;
 static DWORD g_TsPacketBufSize;
 static DWORD g_OpenTunerRetDelay;
@@ -49,25 +58,45 @@ struct stDriver {
 	BOOL bUsed;
 	FILETIME ftLoad;
 };
-static std::map<char *, std::vector<stDriver> > DriversMap;
+static std::unordered_map<char *, std::vector<stDriver> > DriversMap;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct stTsReaderArg {
 	IBonDriver *pIBon;
-	volatile BOOL StopTsRead;
-	volatile BOOL ChannelChanged;
+	std::atomic<BOOL> StopTsRead;
+	std::atomic<BOOL> ChannelChanged;
 	DWORD pos;
 	std::list<cProxyServerEx *> TsReceiversList;
 	std::list<cProxyServerEx *> WaitExclusivePrivList;
 	cCriticalSection TsLock;
+#ifdef USE_B25_DECODER_DLL
+	B25DecoderAdapter b25;
+#else
 	B25Decoder b25;
+#endif // USE_B25_DECODER_DLL
+	BOOL bB25Enable;
 	stTsReaderArg()
+		: pIBon(NULL)
+		, StopTsRead(FALSE)
+		, ChannelChanged(TRUE)
+		, pos(0)
+		, TsReceiversList()
+		, WaitExclusivePrivList()
+		, TsLock()
+		, b25()
+		, bB25Enable(FALSE)
 	{
-		StopTsRead = FALSE;
-		ChannelChanged = TRUE;
-		pos = 0;
-	}
+	};
+
+	BOOL IsB25Enabled()
+	{
+#ifdef USE_B25_DECODER_DLL
+		return bB25Enable && b25.is_loaded();
+#else
+		return bB25Enable;
+#endif // USE_B25_DECODER_DLL
+	};
 };
 
 class cProxyServerEx {
