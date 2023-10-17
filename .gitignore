@@ -6,3 +6,5 @@ Release_DLL
 Debug
 Debug_DLL
 x64
+BonDriverProxyEx/aribb25/*
+!BonDriverProxyEx/aribb25/libaribb25.txt
