@@ -1,0 +1,8 @@
+.vs
+*.zip
+*.exe
+Release
+Release_DLL
+Debug
+Debug_DLL
+x64
