@@ -26,6 +26,8 @@ using B25Decoder = B25DecoderAdapter;
 #endif // USE_B25_DECODER_DLL
 
 static int g_b25_enable;
+// グローバル変数
+TCHAR g_szAppName[MAX_PATH];
 
 static int Init(HMODULE hModule)
 {
@@ -2018,7 +2020,7 @@ void NotifyIcon(int mode)
 		nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
 		nid.uCallbackMessage = WM_TASKTRAY;
 		nid.hIcon = LoadIcon(g_hInstance, _T("BDPEX_ICON"));
-		lstrcpy(nid.szTip, _T("BonDriverProxyEx"));
+		lstrcpy(nid.szTip, g_szAppName);
 		for (;;)
 		{
 			if (Shell_NotifyIcon(NIM_ADD, &nid))
@@ -2232,22 +2234,44 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE/*hPrevInstance*/, LPSTR/*lpCmd
 	MSG msg;
 	WNDCLASSEX wndclass;
 
+	// ウィンドウクラスの設定
 	wndclass.cbSize = sizeof(wndclass);
 	wndclass.style = CS_HREDRAW | CS_VREDRAW;
 	wndclass.lpfnWndProc = WndProc;
 	wndclass.cbClsExtra = 0;
 	wndclass.cbWndExtra = 0;
 	wndclass.hInstance = hInstance;
-	wndclass.hIcon = LoadIcon(hInstance, _T("BDPEX_ICON"));
-	wndclass.hCursor = LoadCursor(NULL, IDC_ARROW);
-	wndclass.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
-	wndclass.lpszMenuName = NULL;
-	wndclass.lpszClassName = _T("bdpex");
-	wndclass.hIconSm = LoadIcon(hInstance, _T("BDPEX_ICON"));
 
-	RegisterClassEx(&wndclass);
+	// 実行ファイルのパスを取得
+	TCHAR szFileName[MAX_PATH];
+	GetModuleFileName(NULL, szFileName, MAX_PATH);
 
-	g_hWnd = CreateWindow(_T("bdpex"), _T("Information"), WS_OVERLAPPED | WS_SYSMENU | WS_THICKFRAME, CW_USEDEFAULT, 0, 640, 320, NULL, NULL, hInstance, NULL);
+	// ファイル名部分を取得
+	TCHAR* szFileNameOnly = _tcsrchr(szFileName, '\\');
+	if (szFileNameOnly)
+	{
+		szFileNameOnly++; // バックスラッシュをスキップ
+
+		// 拡張子を除いたファイル名を取得
+		TCHAR* szExtension = _tcsrchr(szFileNameOnly, '.');
+		if (szExtension)
+		{
+			*szExtension = '\0'; // 拡張子を削除
+		}
+
+		_tcscpy_s(g_szAppName, _countof(g_szAppName), szFileNameOnly); // グローバル変数に値をコピー
+
+		wndclass.lpszClassName = szFileNameOnly; // ウィンドウクラスの名前を設定
+		wndclass.hIcon = LoadIcon(hInstance, _T("BDPEX_ICON"));
+		wndclass.hCursor = LoadCursor(NULL, IDC_ARROW);
+		wndclass.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
+		wndclass.lpszMenuName = NULL;
+		wndclass.hIconSm = LoadIcon(hInstance, _T("BDPEX_ICON"));
+
+		RegisterClassEx(&wndclass);
+
+		g_hWnd = CreateWindow(szFileNameOnly, szFileNameOnly, WS_OVERLAPPED | WS_SYSMENU | WS_THICKFRAME, CW_USEDEFAULT, 0, 640, 320, NULL, NULL, hInstance, NULL);
+	}
 
 //	ShowWindow(g_hWnd, nCmdShow);
 //	UpdateWindow(g_hWnd);
