@@ -5,6 +5,7 @@
 		- [1. サーバー側](#1-サーバー側)
 		- [2. クライアント側](#2-クライアント側)
 	- [サンプル](#サンプル)
+	- [ビルド](#ビルド)
 - [最後に](#最後に)
 	- [LICENSE](#license)
 	- [更新履歴](#更新履歴)
@@ -90,6 +91,12 @@ BONDRIVER=PT-T
 クライアント用iniファイル: [BonDriver_Proxy_Sample.ini](./BonDriver_Proxy_Sample.ini)  
 サーバ用iniファイル: [BonDriverProxyEx_Sample](./BonDriverProxyEx_Sample.ini)  
 クライアント用BonDriver_Proxyリポジトリ(fork版): [BonDriverProxy](https://github.com/stuayu/BonDriverProxy)
+
+## ビルド
+BonDriverProxyEx/aribb25 フォルダに[libaribb25](https://github.com/epgdatacapbon/libaribb25/tree/master/aribb25)をコピーの上  
+BonDriverProxyEx.slnからビルドできます。  
+（個人的にはRelease_DLLがお勧めです。）  
+[MEMO.txt](./MEMO.txt)も参照ください。
 
 # 最後に
 こんな感じでしょうか？他にあるかな…  
