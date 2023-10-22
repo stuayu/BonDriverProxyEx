@@ -32,7 +32,15 @@ public:
 			m_hModule = ::LoadLibrary(_T(".\\libaribb25.dll"));
 			if (m_hModule == NULL)
 			{
-				return FALSE;
+				m_hModule = ::LoadLibrary(_T(".\\B1Decoder.dll"));
+				if (m_hModule == NULL)
+				{
+					m_hModule = ::LoadLibrary(_T(".\\libaribb1.dll"));
+					if (m_hModule == NULL)
+					{
+						return FALSE;
+					}
+				}
 			}
 		}
 		IB25Decoder *(*func)();
