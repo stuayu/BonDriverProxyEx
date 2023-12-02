@@ -518,6 +518,10 @@
     <ClInclude Include="aribb25\ts_section_parser.h" />
     <ClInclude Include="aribb25\ts_section_parser_error_code.h" />
     <ClInclude Include="BonDriverProxyEx.h" />
+    <ClInclude Include="resource.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="BonDriverProxyEx.ico" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

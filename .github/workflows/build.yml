@@ -1,0 +1,56 @@
+name: BonDriverProxyEx_Build
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout BonDriverProxyEx
+        uses: actions/checkout@v4
+        with:
+          path: ./BonDriverProxyEx
+
+      - name: Checkout libaribb25
+        uses: actions/checkout@v4
+        with:
+          repository: tkmsst/libaribb25
+          path: ./libaribb25
+
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v1.1
+
+      - name: File Copy
+        run: |
+          copy -R ./libaribb25/aribb25 ./BonDriverProxyEx/BonDriverProxyEx -Force
+
+      - name: MSBuild
+        run: |
+          cd BonDriverProxyEx
+          MSBuild BonDriverProxyEx.sln /t:build /p:Configuration=Release /p:Platform=x64
+          MSBuild BonDriverProxyEx.sln /t:build /p:Configuration=Release /p:Platform=Win32
+          MSBuild BonDriverProxyEx.sln /t:build /p:Configuration=Release_DLL /p:Platform=x64
+          MSBuild BonDriverProxyEx.sln /t:build /p:Configuration=Release_DLL /p:Platform=Win32
+          MSBuild BonDriverProxyEx.sln /t:build /p:Configuration=Debug /p:Platform=x64
+          MSBuild BonDriverProxyEx.sln /t:build /p:Configuration=Debug /p:Platform=Win32
+          MSBuild BonDriverProxyEx.sln /t:build /p:Configuration=Debug_DLL /p:Platform=x64
+          MSBuild BonDriverProxyEx.sln /t:build /p:Configuration=Debug_DLL /p:Platform=Win32
+
+      - name: File Copy
+        run: |
+          cd BonDriverProxyEx
+          mkdir Build
+          copy -R ./x64 ./Build
+          copy -R ./Release ./Build
+          copy -R ./Release_DLL ./Build
+          copy -R ./Debug ./Build
+          copy -R ./Debug_DLL ./Build
+
+      - name: save build data x64
+        uses: actions/upload-artifact@v2
+        with:
+          name: BonDriverProxyEx
+          path: BonDriverProxyEx/Build

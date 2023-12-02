@@ -97,5 +97,13 @@
     <ClInclude Include="aribb25\B25Decoder.h">
       <Filter>ヘッダー ファイル\aribb25</Filter>
     </ClInclude>
+    <ClInclude Include="resource.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="BonDriverProxyEx.ico">
+      <Filter>リソース ファイル</Filter>
+    </Image>
   </ItemGroup>
 </Project>
