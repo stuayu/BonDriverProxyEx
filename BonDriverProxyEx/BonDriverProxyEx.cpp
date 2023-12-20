@@ -26,6 +26,9 @@ using B25Decoder = B25DecoderAdapter;
 #endif // USE_B25_DECODER_DLL
 
 static int g_b25_enable;
+// アイコンの名前を格納するためのバッファ
+char szIconName[256];
+wchar_t wszIconName[256];
 // グローバル変数
 TCHAR g_szAppName[MAX_PATH];
 
@@ -50,6 +53,10 @@ static int Init(HMODULE hModule)
 	g_SandBoxedRelease = GetPrivateProfileIntA("OPTION", "SANDBOXED_RELEASE", 0, szIniPath);
 	g_DisableUnloadBonDriver = GetPrivateProfileIntA("OPTION", "DISABLE_UNLOAD_BONDRIVER", 0, szIniPath);
 	g_b25_enable = GetPrivateProfileIntA("OPTION", "B25", 0, szIniPath);
+	// INIファイルからアイコンの名前を取得
+	GetPrivateProfileStringA("OPTION", "ICON", "BDPEX_ICON_DEFAULT", szIconName, sizeof(szIconName), szIniPath);
+	MultiByteToWideChar(CP_ACP, 0, szIconName, -1, wszIconName, sizeof(wszIconName) / sizeof(wszIconName[0]));
+
 	if (g_b25_enable)
 	{
 		B25Decoder::strip = GetPrivateProfileIntA("OPTION", "STRIP", 1, szIniPath);
@@ -2019,7 +2026,7 @@ void NotifyIcon(int mode)
 		// ADD
 		nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
 		nid.uCallbackMessage = WM_TASKTRAY;
-		nid.hIcon = LoadIcon(g_hInstance, _T("BDPEX_ICON"));
+		nid.hIcon = LoadIcon(g_hInstance, wszIconName);
 		lstrcpy(nid.szTip, g_szAppName);
 		for (;;)
 		{
@@ -2262,11 +2269,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE/*hPrevInstance*/, LPSTR/*lpCmd
 		_tcscpy_s(g_szAppName, _countof(g_szAppName), szFileNameOnly); // グローバル変数に値をコピー
 
 		wndclass.lpszClassName = szFileNameOnly; // ウィンドウクラスの名前を設定
-		wndclass.hIcon = LoadIcon(hInstance, _T("BDPEX_ICON"));
+		wndclass.hIcon = LoadIcon(hInstance, wszIconName);
 		wndclass.hCursor = LoadCursor(NULL, IDC_ARROW);
 		wndclass.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
 		wndclass.lpszMenuName = NULL;
-		wndclass.hIconSm = LoadIcon(hInstance, _T("BDPEX_ICON"));
+		wndclass.hIconSm = LoadIcon(hInstance, wszIconName);
 
 		RegisterClassEx(&wndclass);
 

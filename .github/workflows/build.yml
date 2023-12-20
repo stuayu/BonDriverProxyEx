@@ -2,7 +2,7 @@ name: BonDriverProxyEx_Build
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -28,6 +28,7 @@ jobs:
           copy -R ./libaribb25/aribb25 ./BonDriverProxyEx/BonDriverProxyEx -Force
 
       - name: MSBuild
+        shell: cmd
         run: |
           cd BonDriverProxyEx
           MSBuild BonDriverProxyEx.sln /t:build /p:Configuration=Release /p:Platform=x64

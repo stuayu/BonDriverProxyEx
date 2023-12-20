@@ -15,7 +15,11 @@ LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
 
 // Icon with lowest ID value placed first to ensure application icon
 // remains consistent on all systems.
-BDPEX_ICON              ICON                    ".\\BonDriverProxyEx.ico"
+BDPEX_ICON_DEFAULT      ICON    ".\\BonDriverProxyEx.ico"
+BDPEX_ICON_GREEN        ICON    ".\\BonDriverProxyEx_green.ico"
+BDPEX_ICON_YELLO        ICON    ".\\BonDriverProxyEx_yello.ico"
+BDPEX_ICON_ORANGE       ICON    ".\\BonDriverProxyEx_orange.ico"
+BDPEX_ICON_BLUE         ICON    ".\\BonDriverProxyEx_blue.ico"
 
 
 /////////////////////////////////////////////////////////////////////////////
