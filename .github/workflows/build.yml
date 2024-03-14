@@ -8,6 +8,17 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    strategy:
+      matrix:
+        platform:
+          - x64
+          - Win32
+        configuration:
+          - Release
+          - Release_DLL
+          - Debug
+          - Debug_DLL
+
     steps:
       - name: Checkout BonDriverProxyEx
         uses: actions/checkout@v4
@@ -21,39 +32,30 @@ jobs:
           path: ./libaribb25
 
       - name: Add msbuild to PATH
-        uses: microsoft/setup-msbuild@v1.1
-        with:
-          msbuild-architecture: x64
+        uses: microsoft/setup-msbuild@v2
 
       - name: File Copy
         run: |
           copy -R ./libaribb25/aribb25 ./BonDriverProxyEx/BonDriverProxyEx -Force
 
       - name: MSBuild
-        shell: cmd
         run: |
           cd BonDriverProxyEx
-          MSBuild BonDriverProxyEx.sln /t:build /p:Configuration=Release /p:Platform=x64
-          MSBuild BonDriverProxyEx.sln /t:build /p:Configuration=Release /p:Platform=Win32
-          MSBuild BonDriverProxyEx.sln /t:build /p:Configuration=Release_DLL /p:Platform=x64
-          MSBuild BonDriverProxyEx.sln /t:build /p:Configuration=Release_DLL /p:Platform=Win32
-          MSBuild BonDriverProxyEx.sln /t:build /p:Configuration=Debug /p:Platform=x64
-          MSBuild BonDriverProxyEx.sln /t:build /p:Configuration=Debug /p:Platform=Win32
-          MSBuild BonDriverProxyEx.sln /t:build /p:Configuration=Debug_DLL /p:Platform=x64
-          MSBuild BonDriverProxyEx.sln /t:build /p:Configuration=Debug_DLL /p:Platform=Win32
+          MSBuild BonDriverProxyEx.sln /t:rebuild /p:Configuration="${{ matrix.configuration }}" /p:Platform="${{ matrix.platform }}" /p:PlatformToolset=v143
 
       - name: File Copy
         run: |
           cd BonDriverProxyEx
           mkdir Build
-          copy -R ./x64 ./Build
-          copy -R ./Release ./Build
-          copy -R ./Release_DLL ./Build
-          copy -R ./Debug ./Build
-          copy -R ./Debug_DLL ./Build
+          copy -R ./${{ matrix.platform }}/${{ matrix.configuration }} ./Build
+          copy BonDriver_Proxy_Sample.ini ./Build
+          copy BonDriverProxyEx_Sample.ini ./Build
+          copy LICENSE.txt ./Build
+          copy MEMO.txt ./Build
+          copy README.md ./Build
 
-      - name: save build data x64
-        uses: actions/upload-artifact@v3
+      - name: Upload asset
+        uses: actions/upload-artifact@v4
         with:
-          name: BonDriverProxyEx
+          name: BonDriverProxyEx_${{ matrix.platform }}_${{ matrix.configuration }}
           path: BonDriverProxyEx/Build
