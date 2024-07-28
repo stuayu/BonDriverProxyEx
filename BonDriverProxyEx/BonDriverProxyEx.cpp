@@ -1112,7 +1112,7 @@ DWORD cProxyServerEx::Process()
 						port = 0;
 					}
 					std::vector<stDriver> &vstDriver = DriversMap.at(pInstance->m_pDriversMapKey);
-					len = ::wsprintfA(buf, "%02d: [%s]:[%d] / [%s][%s] / space[%u] ch[%u]\n", num, addr, port, pInstance->m_pDriversMapKey, vstDriver[pInstance->m_iDriverNo].strBonDriver, pInstance->m_dwSpace, pInstance->m_dwChannel);
+					len = ::wsprintfA(buf, "%02d: [%s]:[%d] / [%s][%s] / space[%u] ch[%u] / Lock[%d]\n", num, addr, port, pInstance->m_pDriversMapKey, vstDriver[pInstance->m_iDriverNo].strBonDriver, pInstance->m_dwSpace, pInstance->m_dwChannel, pInstance->m_bChannelLock);
 					if ((size_t)len >= left)
 					{
 						left += size;
@@ -2105,7 +2105,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 				port = 0;
 			}
 			std::vector<stDriver> &vstDriver = DriversMap.at(pInstance->m_pDriversMapKey);
-			wsprintfA(buf, "%02d: [%s]:[%d] / [%s][%s] / space[%u] ch[%u]", num, addr, port, pInstance->m_pDriversMapKey, vstDriver[pInstance->m_iDriverNo].strBonDriver, pInstance->m_dwSpace, pInstance->m_dwChannel);
+			wsprintfA(buf, "%02d: [%s]:[%d] / [%s][%s] / space[%u] ch[%u] / Lock[%d]", num, addr, port, pInstance->m_pDriversMapKey, vstDriver[pInstance->m_iDriverNo].strBonDriver, pInstance->m_dwSpace, pInstance->m_dwChannel, pInstance->m_bChannelLock);
 			TextOutA(hDc, 5, 5 + (num * tm.tmHeight), buf, lstrlenA(buf));
 			num++;
 		}

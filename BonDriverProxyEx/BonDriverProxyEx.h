@@ -10,6 +10,8 @@
 #include <unordered_map>
 #include <atomic>
 #include <typeinfo>
+#include <iostream>
+#include <string>
 #include "Common.h"
 #include "IBonDriver3.h"
 #ifdef USE_B25_DECODER_DLL
@@ -108,6 +110,7 @@ public:
 	DWORD m_dwChannel;
 	char *m_pDriversMapKey;
 	int m_iDriverNo;
+	BYTE m_bChannelLock;
 #ifdef HAVE_UI
 private:
 #endif
@@ -119,7 +122,6 @@ private:
 	cEvent m_Error;
 	BOOL m_bTunerOpen;
 	HANDLE m_hTsRead;
-	BYTE m_bChannelLock;
 	stTsReaderArg *m_pTsReaderArg;
 	cPacketFifo m_fifoSend;
 	cPacketFifo m_fifoRecv;
