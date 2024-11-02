@@ -114,105 +114,114 @@ static int Init(HMODULE hModule)
 		g_ThreadPrioritySender = THREAD_PRIORITY_IDLE;
 	else
 		g_ThreadPrioritySender = THREAD_PRIORITY_NORMAL;
+{
+	// [OPTION]
+	// BONDRIVER=PT-T
+	// [BONDRIVER]
+	// 00=PT-T;BonDriver_PT3-T0.dll;BonDriver_PT3-T1.dll
+	// 01=PT-S;BonDriver_PT3-S0.dll;BonDriver_PT3-S1.dll
+	// DIR_PATH=C:\BonDriverProxyEx\BonDriver
 
+	int cntD, cntT = 0; // ドライバカウントの初期化
+	size_t dirPathLen, bufLen = 0U; // パス長とバッファ長の初期化
+	char *str, *strPath, *pos, *pp[MAX_DRIVERS], **ppDriver; // 文字列ポインタの宣言
+	char tag[4], buf[MAX_PATH * 4]; // タグとバッファの宣言
+	char lastChr = '\0'; // 最後の文字の初期化
+
+	// iniファイルからDIR_PATHを取得
+	GetPrivateProfileStringA("BONDRIVER", "DIR_PATH", "", g_DriverDir, sizeof(g_DriverDir), szIniPath);
+	dirPathLen = strlen(g_DriverDir);
+	if (dirPathLen)
 	{
-		// [OPTION]
-		// BONDRIVER=PT-T
-		// [BONDRIVER]
-		// 00=PT-T;BonDriver_PT3-T0.dll;BonDriver_PT3-T1.dll
-		// 01=PT-S;BonDriver_PT3-S0.dll;BonDriver_PT3-S1.dll
-		// DIR_PATH=C:\BonDriverProxyEx\BonDriver
-		int cntD, cntT = 0;
-		size_t dirPathLen, bufLen = 0U;
-		char *str, *strPath, *pos, *pp[MAX_DRIVERS], **ppDriver;
-		char tag[4], buf[MAX_PATH * 4];
-		char lastChr = '\0';
-		GetPrivateProfileStringA("BONDRIVER", "DIR_PATH", "", g_DriverDir, sizeof(g_DriverDir), szIniPath);
-		dirPathLen = strlen(g_DriverDir);
-		if (dirPathLen)
+		lastChr = g_DriverDir[dirPathLen - 1];
+		if (lastChr != '\\' && lastChr != '/')
 		{
-			lastChr = g_DriverDir[dirPathLen-1];
-			if (lastChr != '\\' && lastChr != '/')
+			if (dirPathLen + 1 >= sizeof(g_DriverDir))
 			{
-				if (dirPathLen + 1 >= sizeof(g_DriverDir))
-				{
-					g_DriverDir[0] = '\0';
-					dirPathLen = 0;
-				}
-				else
-				{
-					g_DriverDir[dirPathLen] = '\\';
-					++dirPathLen;
-				}
+				g_DriverDir[0] = '\0';
+				dirPathLen = 0;
 			}
-		}
-		for (int i = 0; i < MAX_DRIVERS; i++)
-		{
-			tag[0] = (char)('0' + (i / 10));
-			tag[1] = (char)('0' + (i % 10));
-			tag[2] = '\0';
-			GetPrivateProfileStringA("BONDRIVER", tag, "", buf, sizeof(buf), szIniPath);
-			if (buf[0] == '\0')
+			else
 			{
-				g_ppDriver[cntT] = NULL;
-				break;
-			}
-
-			// format: GroupName;BonDriver1;BonDriver2;BonDriver3...
-			// e.g.  : PT-T;BonDriver_PT3-T0.dll;BonDriver_PT3-T1.dll
-			bufLen = strlen(buf);
-			str = new char[bufLen + 1];
-			strcpy(str, buf);
-			pos = pp[0] = str;
-			cntD = 1;
-			for (;;)
-			{
-				p = strchr(pos, ';');
-				if (p)
-				{
-					*p = '\0';
-					pos = pp[cntD++] = p + 1;
-					if (cntD > (MAX_DRIVERS - 1))
-						break;
-				}
-				else
-					break;
-			}
-			if (cntD == 1)
-			{
-				delete[] str;
-				continue;
-			}
-			else if (dirPathLen)
-			{
-				pp[cntD] = NULL;
-				strPath = new char[(dirPathLen * (cntD-1)) + bufLen + 1];
-				strcpy(strPath, str);
-				pp[0] = strPath;
-				p = &strPath[strlen(strPath)];
-				pos = pp[1];
-				for (int j = 1; pos != NULL;)
-				{
-					++p;
-					memcpy(p, g_DriverDir, dirPathLen);
-					memcpy(p + dirPathLen, pos, strlen(pos) + 1);
-					pp[j] = p;
-					p += strlen(p);
-					pos = pp[++j];
-				}
-				delete[] str;
-			}
-			ppDriver = g_ppDriver[cntT++] = new char *[cntD];
-			memcpy(ppDriver, pp, sizeof(char *) * cntD);
-			std::vector<stDriver> &vstDriver = DriversMap.emplace(ppDriver[0], cntD - 1).first->second;
-			for (int j = 1; j < cntD; j++)
-			{
-				vstDriver[j-1].strBonDriver = ppDriver[j];
-				vstDriver[j-1].hModule = NULL;
-				vstDriver[j-1].bUsed = FALSE;
+				g_DriverDir[dirPathLen] = '\\';
+				++dirPathLen;
 			}
 		}
 	}
+
+	// ドライバの読み込みループ
+	for (int i = 0; i < MAX_DRIVERS; i++)
+	{
+		// タグの生成
+		tag[0] = (char)('0' + (i / 10));
+		tag[1] = (char)('0' + (i % 10));
+		tag[2] = '\0';
+
+		// iniファイルからドライバ情報を取得
+		GetPrivateProfileStringA("BONDRIVER", tag, "", buf, sizeof(buf), szIniPath);
+		if (buf[0] == '\0')
+		{
+			g_ppDriver[cntT] = NULL;
+			break;
+		}
+
+		// ドライバ情報の解析
+		// format: GroupName;BonDriver1;BonDriver2;BonDriver3...
+		// e.g.  : PT-T;BonDriver_PT3-T0.dll;BonDriver_PT3-T1.dll
+		bufLen = strlen(buf);
+		str = new char[bufLen + 1];
+		strcpy(str, buf);
+		pos = pp[0] = str;
+		cntD = 1;
+		for (;;)
+		{
+			p = strchr(pos, ';');
+			if (p)
+			{
+				*p = '\0';
+				pos = pp[cntD++] = p + 1;
+				if (cntD > (MAX_DRIVERS - 1))
+					break;
+			}
+			else
+				break;
+		}
+		if (cntD == 1)
+		{
+			delete[] str;
+			continue;
+		}
+		else if (dirPathLen)
+		{
+			pp[cntD] = NULL;
+			strPath = new char[(dirPathLen * (cntD - 1)) + bufLen + 1];
+			strcpy(strPath, str);
+			pp[0] = strPath;
+			p = &strPath[strlen(strPath)];
+			pos = pp[1];
+			for (int j = 1; pos != NULL;)
+			{
+				++p;
+				memcpy(p, g_DriverDir, dirPathLen);
+				memcpy(p + dirPathLen, pos, strlen(pos) + 1);
+				pp[j] = p;
+				p += strlen(p);
+				pos = pp[++j];
+			}
+			delete[] str;
+		}
+		ppDriver = g_ppDriver[cntT++] = new char *[cntD];
+		memcpy(ppDriver, pp, sizeof(char *) * cntD);
+		std::vector<stDriver> &vstDriver = DriversMap.emplace(ppDriver[0], cntD - 1).first->second;
+		for (int j = 1; j < cntD; j++)
+		{
+			vstDriver[j - 1].strBonDriver = ppDriver[j];
+			vstDriver[j - 1].hModule = NULL;
+			vstDriver[j - 1].bUsed = FALSE;
+		}
+	}
+}
+
 
 #if _DEBUG && DETAILLOG2
 	for (int i = 0; i < MAX_DRIVERS; i++)
@@ -274,25 +283,28 @@ static void ShutdownInstances()
 
 static void CleanUp()
 {
+	// ドライバのクリーンアップ処理
 	for (int i = 0; i < MAX_DRIVERS; i++)
 	{
 		if (g_ppDriver[i] == NULL)
 			break;
+		// ドライバのリストを取得
 		std::vector<stDriver> &v = DriversMap.at(g_ppDriver[i][0]);
 		for (size_t j = 0; j < v.size(); j++)
 		{
 			if (v[j].hModule != NULL)
-				FreeLibrary(v[j].hModule);
+				FreeLibrary(v[j].hModule); // ロードされたモジュールを解放
 		}
-		delete[] g_ppDriver[i][0];
-		delete[] g_ppDriver[i];
+		delete[] g_ppDriver[i][0]; // ドライバ名のメモリを解放
+		delete[] g_ppDriver[i]; // ドライバリストのメモリを解放
 		g_ppDriver[i] = NULL;
 	}
-	DriversMap.clear();
+	DriversMap.clear(); // ドライバマップをクリア
 }
 
 cProxyServerEx::cProxyServerEx() : m_Error(TRUE, FALSE)
 {
+	// メンバ変数の初期化
 	m_s = INVALID_SOCKET;
 	m_hModule = NULL;
 	m_pIBon = m_pIBon2 = m_pIBon3 = NULL;
@@ -300,7 +312,7 @@ cProxyServerEx::cProxyServerEx() : m_Error(TRUE, FALSE)
 	m_bChannelLock = 0;
 	m_hTsRead = NULL;
 	m_pTsReaderArg = NULL;
-	m_dwSpace = m_dwChannel = 0x7fffffff;	// INT_MAX
+	m_dwSpace = m_dwChannel = 0x7fffffff; // INT_MAX
 	m_pDriversMapKey = NULL;
 	m_iDriverNo = -1;
 	m_iDriverUseOrder = 0;
@@ -308,17 +320,17 @@ cProxyServerEx::cProxyServerEx() : m_Error(TRUE, FALSE)
 
 cProxyServerEx::~cProxyServerEx()
 {
-	LOCK(g_Lock);
+	LOCK(g_Lock); // グローバルロックを取得
 	BOOL bRelease = TRUE;
 	std::list<cProxyServerEx *>::iterator it = g_InstanceList.begin();
 	while (it != g_InstanceList.end())
 	{
 		if (*it == this)
-			g_InstanceList.erase(it++);
+			g_InstanceList.erase(it++); // インスタンスリストから自身を削除
 		else
 		{
 			if ((m_hModule != NULL) && (m_hModule == (*it)->m_hModule))
-				bRelease = FALSE;
+				bRelease = FALSE; // 他のインスタンスが同じモジュールを使用している場合
 			++it;
 		}
 	}
@@ -332,7 +344,7 @@ cProxyServerEx::~cProxyServerEx()
 			delete m_pTsReaderArg;
 		}
 
-		Release();
+		Release(); // リソースの解放
 
 		if (m_hModule)
 		{
@@ -340,7 +352,7 @@ cProxyServerEx::~cProxyServerEx()
 			vstDriver[m_iDriverNo].bUsed = FALSE;
 			if (!g_DisableUnloadBonDriver)
 			{
-				::FreeLibrary(m_hModule);
+				::FreeLibrary(m_hModule); // モジュールを解放
 				vstDriver[m_iDriverNo].hModule = NULL;
 			}
 		}
@@ -348,10 +360,10 @@ cProxyServerEx::~cProxyServerEx()
 	else
 	{
 		if (m_hTsRead)
-			StopTsReceive();
+			StopTsReceive(); // TS受信を停止
 	}
 	if (m_s != INVALID_SOCKET)
-		::closesocket(m_s);
+		::closesocket(m_s); // ソケットを閉じる
 }
 
 DWORD WINAPI cProxyServerEx::Reception(LPVOID pv)
@@ -364,16 +376,20 @@ DWORD WINAPI cProxyServerEx::Reception(LPVOID pv)
 	// 接続クライアントがいる間はスリープ抑止
 	EXECUTION_STATE es = ::SetThreadExecutionState(g_ThreadExecutionState);
 
+	// プロキシサーバーの処理を実行
 	DWORD ret = pProxy->Process();
-	delete pProxy;
+	delete pProxy; // プロキシサーバーオブジェクトを削除
 
 #ifdef HAVE_UI
+	// UIが有効な場合、ウィンドウを再描画
 	::InvalidateRect(g_hWnd, NULL, TRUE);
 #endif
 
+	// スレッド実行状態を元に戻す
 	if (es != NULL)
 		::SetThreadExecutionState(es);
 
+	// COMライブラリの初期化を解除
 	if (SUCCEEDED(hr))
 		::CoUninitialize();
 
@@ -2078,6 +2094,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 			SOCKADDR_IN6 si6;
 		};
 		char addr[INET6_ADDRSTRLEN];
+		char host[NI_MAXHOST];
 		int port, len, num = 0;
 		char buf[2048];
 		g_Lock.Enter();
@@ -2098,14 +2115,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 					inet_ntop(AF_INET6, &(si6.sin6_addr), addr, sizeof(addr));
 					port = ntohs(si6.sin6_port);
 				}
+				// ホスト名を取得
+				if (getnameinfo((SOCKADDR *)&ss, len, host, sizeof(host), NULL, 0, NI_NAMEREQD) != 0)
+				{
+					lstrcpyA(host, "None");
+				}
 			}
 			else
 			{
 				lstrcpyA(addr, "unknown host...");
+				lstrcpyA(host, "None");
 				port = 0;
 			}
 			std::vector<stDriver> &vstDriver = DriversMap.at(pInstance->m_pDriversMapKey);
-			wsprintfA(buf, "%02d: [%s]:[%d] / [%s][%s] / space[%u] ch[%u] / Lock[%d]", num, addr, port, pInstance->m_pDriversMapKey, vstDriver[pInstance->m_iDriverNo].strBonDriver, pInstance->m_dwSpace, pInstance->m_dwChannel, pInstance->m_bChannelLock);
+			wsprintfA(buf, "%02d: [%s:%s]:[%d] / Group:[%s] Space[%u] Ch[%u] Lock[%d] / Path:[%s]", num, addr, host, port, pInstance->m_pDriversMapKey, pInstance->m_dwSpace, pInstance->m_dwChannel, pInstance->m_bChannelLock, vstDriver[pInstance->m_iDriverNo].strBonDriver);
 			TextOutA(hDc, 5, 5 + (num * tm.tmHeight), buf, lstrlenA(buf));
 			num++;
 		}
@@ -2202,6 +2225,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE/*hPrevInstance*/, LPSTR/*lpCmdLine*/, int/*nCmdShow*/)
 {
 #if _DEBUG
+	// デバッグ用のログファイルを作成
 	HANDLE hLogFile = CreateFile(_T("BDProxyEx_Debug.log"), GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 	_CrtMemState ostate, nstate, dstate;
 	_CrtMemCheckpoint(&ostate);
@@ -2211,15 +2235,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE/*hPrevInstance*/, LPSTR/*lpCmd
 	_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE | _CRTDBG_MODE_DEBUG);
 	_CrtSetReportFile(_CRT_ERROR, hLogFile);
 	_RPT0(_CRT_WARN, "--- PROCESS_START ---\n");
-//	int *p = new int[2];	// リーク検出テスト用
+//  int *p = new int[2];    // リーク検出テスト用
 #endif
 
+	// 初期化処理
 	if (Init(hInstance) != 0)
 	{
 		MessageBox(NULL, _T("iniファイルが見つかりません。"), _T("Error"), MB_OK);
 		return -1;
 	}
 
+	// Winsockの初期化
 	WSADATA wsa;
 	if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
 	{
@@ -2227,6 +2253,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE/*hPrevInstance*/, LPSTR/*lpCmd
 		return -2;
 	}
 
+	// ホスト情報の設定
 	HostInfo *phi = new HostInfo;
 	phi->host = g_Host;
 	phi->port = g_Port;
@@ -2266,23 +2293,28 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE/*hPrevInstance*/, LPSTR/*lpCmd
 			*szExtension = '\0'; // 拡張子を削除
 		}
 
-		_tcscpy_s(g_szAppName, _countof(g_szAppName), szFileNameOnly); // グローバル変数に値をコピー
+		// グローバル変数に値をコピー
+		_tcscpy_s(g_szAppName, _countof(g_szAppName), szFileNameOnly);
 
-		wndclass.lpszClassName = szFileNameOnly; // ウィンドウクラスの名前を設定
+		// ウィンドウクラスの名前を設定
+		wndclass.lpszClassName = szFileNameOnly;
 		wndclass.hIcon = LoadIcon(hInstance, wszIconName);
 		wndclass.hCursor = LoadCursor(NULL, IDC_ARROW);
 		wndclass.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
 		wndclass.lpszMenuName = NULL;
 		wndclass.hIconSm = LoadIcon(hInstance, wszIconName);
 
+		// ウィンドウクラスを登録
 		RegisterClassEx(&wndclass);
 
+		// ウィンドウを作成
 		g_hWnd = CreateWindow(szFileNameOnly, szFileNameOnly, WS_OVERLAPPED | WS_SYSMENU | WS_THICKFRAME, CW_USEDEFAULT, 0, 640, 320, NULL, NULL, hInstance, NULL);
 	}
 
-//	ShowWindow(g_hWnd, nCmdShow);
-//	UpdateWindow(g_hWnd);
+//  ShowWindow(g_hWnd, nCmdShow);
+//  UpdateWindow(g_hWnd);
 
+	// グローバル変数の設定
 	g_hInstance = hInstance;
 	g_hMenu = CreatePopupMenu();
 	InsertMenu(g_hMenu, 0, MF_BYPOSITION | MF_STRING, ID_TASKTRAY_SHOW, _T("情報ウィンドウ表示"));
@@ -2290,21 +2322,26 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE/*hPrevInstance*/, LPSTR/*lpCmd
 	InsertMenu(g_hMenu, 2, MF_BYPOSITION | MF_STRING, ID_TASKTRAY_EXIT, _T("終了"));
 	NotifyIcon(0);
 
+	// メッセージループ
 	while (GetMessage(&msg, NULL, 0, 0))
 	{
 		TranslateMessage(&msg);
 		DispatchMessage(&msg);
 	}
 
-	ShutdownInstances();	// g_hListenThreadはこの中でCloseHandle()される
-	CleanUp();				// ShutdownInstances()でDriversMapにアクセスするスレッドは無くなっているはず
+	// クリーンアップ処理
+	ShutdownInstances();    // g_hListenThreadはこの中でCloseHandle()される
+	CleanUp();              // ShutdownInstances()でDriversMapにアクセスするスレッドは無くなっているはず
 
+	// 通知アイコンの削除
 	NotifyIcon(1);
 	DestroyMenu(g_hMenu);
 
+	// Winsockのクリーンアップ
 	WSACleanup();
 
 #if _DEBUG
+	// メモリリークチェック
 	_CrtMemCheckpoint(&nstate);
 	if (_CrtMemDifference(&dstate, &ostate, &nstate))
 	{

@@ -15,6 +15,8 @@
 BonDriverProxyのサーバ側にBonDriver自動選択機能を加えたものです。  
 dll側はバイナリ互換なので、BonDriverProxyの物を使用できます。  
 
+<img src="image/image.png" width="50%">
+
 ## BonDriverProxyとの設定方法の違い
 ### 1. サーバー側
 まずサーバ側のiniで、  
